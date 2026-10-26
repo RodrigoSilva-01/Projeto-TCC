@@ -1,15 +1,28 @@
+
 import { useEffect, useState } from "react";
-import { Clock, Save } from "lucide-react";
+import { Clock, Save, CreditCard } from "lucide-react";
 
 import { useAuth } from "../contexts/AuthContext";
 
-import { buscarHorariosEmpresa, salvarHorariosEmpresa } from "../services/horariosEmpresaService";
+import {
+    buscarHorariosEmpresa,
+    salvarHorariosEmpresa,
+} from "../services/horariosEmpresaService";
 
-import { buscarConfiguracoesEmpresa, salvarHorariosConfiguracao } from "../services/configuracoesEmpresaService";
+
+import {
+    buscarConfiguracoesEmpresa,
+    salvarHorariosConfiguracao,
+    buscarLimitesEmpresa,
+    salvarLimitesEmpresa,
+} from "../services/configuracoesEmpresaService";
+
 
 import {
     buscarRegrasCobranca,
     salvarRegrasCobranca,
+    buscarRegrasCobrancaServicos,
+    salvarRegraCobrancaServico,
 } from "../services/regrasCobrancaService";
 
 const diasSemana = [
@@ -72,52 +85,37 @@ const gruposHorarios = [
     },
 ];
 
+function formatarNomeServico(regra) {
+    const servico = Array.isArray(regra.servicos)
+        ? regra.servicos[0]
+        : regra.servicos;
+
+    return servico?.nome || "Serviço sem nome";
+}
+
 export default function ConfiguracoesEmpresa() {
     const { vinculosEmpresa, ehAdministrador } = useAuth();
 
-    // Estados do funcionamento semanal
-    const [horarios, setHorarios] = useState([]);
-    const [carregando, setCarregando] = useState(true);
-    const [salvando, setSalvando] = useState(false);
-    const [erro, setErro] = useState("");
-    const [sucesso, setSucesso] = useState("");
+    // =====================================================
+    // EMPRESA
+    // =====================================================
 
-    // Estados dos horários de entrada e saída
-    const [configuracoes, setConfiguracoes] = useState(
-        configuracoesPadrao
-    );
-
-    const [carregandoConfiguracoes, setCarregandoConfiguracoes] =
-        useState(true);
-
-    const [salvandoConfiguracoes, setSalvandoConfiguracoes] =
-        useState(false);
-
-    const [erroConfiguracoes, setErroConfiguracoes] = useState("");
-    const [sucessoConfiguracoes, setSucessoConfiguracoes] = useState("");
-
-    // Estados das regras de cobrança
-    const [regrasCobranca, setRegrasCobranca] = useState({
-        valor_adaptacao: "50.00",
-        percentual_sinal: "30",
-        sinal_obrigatorio: true,
-        sinal_reembolsavel: false,
-        limite_pets_dia: "20",
-    });
-
-    const [carregandoCobranca, setCarregandoCobranca] = useState(true);
-    const [salvandoCobranca, setSalvandoCobranca] = useState(false);
-    const [erroCobranca, setErroCobranca] = useState("");
-    const [sucessoCobranca, setSucessoCobranca] = useState("");
-
-    // Identifica a empresa do administrador
     const vinculoAdmin = vinculosEmpresa.find(
         (vinculo) => vinculo.perfil === "admin" && vinculo.ativo
     );
 
     const empresaId = vinculoAdmin?.empresa_id;
 
-    // Carrega os horários de funcionamento semanal
+    // =====================================================
+    // FUNCIONAMENTO SEMANAL
+    // =====================================================
+
+    const [horarios, setHorarios] = useState([]);
+    const [carregando, setCarregando] = useState(true);
+    const [salvando, setSalvando] = useState(false);
+    const [erro, setErro] = useState("");
+    const [sucesso, setSucesso] = useState("");
+
     useEffect(() => {
         let ativo = true;
 
@@ -140,15 +138,13 @@ export default function ConfiguracoesEmpresa() {
                 const horariosCarregados = padroes.map((padrao) => {
                     const existente = dados.find(
                         (item) =>
-                            item.dia_semana === padrao.dia_semana
+                            Number(item.dia_semana) === padrao.dia_semana
                     );
 
-                    if (!existente) {
-                        return padrao;
-                    }
+                    if (!existente) return padrao;
 
                     return {
-                        dia_semana: existente.dia_semana,
+                        dia_semana: Number(existente.dia_semana),
                         aberto: existente.aberto,
                         hora_inicio: existente.hora_inicio
                             ? existente.hora_inicio.slice(0, 5)
@@ -169,9 +165,7 @@ export default function ConfiguracoesEmpresa() {
                     );
                 }
             } finally {
-                if (ativo) {
-                    setCarregando(false);
-                }
+                if (ativo) setCarregando(false);
             }
         }
 
@@ -182,7 +176,59 @@ export default function ConfiguracoesEmpresa() {
         };
     }, [empresaId, ehAdministrador]);
 
-    // Carrega as configurações de atendimento, entrada e saída
+    function atualizarHorario(dia, campo, valor) {
+        setHorarios((atuais) =>
+            atuais.map((horario) =>
+                horario.dia_semana === dia
+                    ? { ...horario, [campo]: valor }
+                    : horario
+            )
+        );
+
+        setErro("");
+        setSucesso("");
+    }
+
+    async function handleSalvar(event) {
+        event.preventDefault();
+
+        if (!empresaId || !ehAdministrador) {
+            setErro("Você não tem permissão para alterar os horários.");
+            return;
+        }
+
+        setSalvando(true);
+        setErro("");
+        setSucesso("");
+
+        try {
+            await salvarHorariosEmpresa(empresaId, horarios);
+            setSucesso("Horários salvos com sucesso!");
+        } catch (error) {
+            console.error("Erro ao salvar horários:", error);
+            setErro(error.message || "Não foi possível salvar os horários.");
+        } finally {
+            setSalvando(false);
+        }
+    }
+
+    // =====================================================
+    // HORÁRIOS DE ATENDIMENTO, ENTRADA E SAÍDA
+    // =====================================================
+
+    const [configuracoes, setConfiguracoes] = useState(
+        configuracoesPadrao
+    );
+
+    const [carregandoConfiguracoes, setCarregandoConfiguracoes] =
+        useState(true);
+
+    const [salvandoConfiguracoes, setSalvandoConfiguracoes] =
+        useState(false);
+
+    const [erroConfiguracoes, setErroConfiguracoes] = useState("");
+    const [sucessoConfiguracoes, setSucessoConfiguracoes] = useState("");
+
     useEffect(() => {
         let ativo = true;
 
@@ -206,8 +252,7 @@ export default function ConfiguracoesEmpresa() {
 
                         Object.keys(atuais).forEach((campo) => {
                             if (dados[campo]) {
-                                atualizadas[campo] =
-                                    dados[campo].slice(0, 5);
+                                atualizadas[campo] = dados[campo].slice(0, 5);
                             }
                         });
 
@@ -215,10 +260,7 @@ export default function ConfiguracoesEmpresa() {
                     });
                 }
             } catch (error) {
-                console.error(
-                    "Erro ao carregar configurações:",
-                    error
-                );
+                console.error("Erro ao carregar configurações:", error);
 
                 if (ativo) {
                     setErroConfiguracoes(
@@ -226,9 +268,7 @@ export default function ConfiguracoesEmpresa() {
                     );
                 }
             } finally {
-                if (ativo) {
-                    setCarregandoConfiguracoes(false);
-                }
+                if (ativo) setCarregandoConfiguracoes(false);
             }
         }
 
@@ -238,6 +278,80 @@ export default function ConfiguracoesEmpresa() {
             ativo = false;
         };
     }, [empresaId, ehAdministrador]);
+
+    function atualizarConfiguracao(campo, valor) {
+        setConfiguracoes((atuais) => ({
+            ...atuais,
+            [campo]: valor,
+        }));
+
+        setErroConfiguracoes("");
+        setSucessoConfiguracoes("");
+    }
+
+    async function handleSalvarConfiguracoes(event) {
+        event.preventDefault();
+
+        if (!empresaId || !ehAdministrador) {
+            setErroConfiguracoes(
+                "Você não tem permissão para alterar as configurações."
+            );
+            return;
+        }
+
+        setSalvandoConfiguracoes(true);
+        setErroConfiguracoes("");
+        setSucessoConfiguracoes("");
+
+        try {
+            const dadosSalvos = await salvarHorariosConfiguracao(
+                empresaId,
+                configuracoes
+            );
+
+            setConfiguracoes((atuais) => {
+                const atualizadas = { ...atuais };
+
+                Object.keys(atuais).forEach((campo) => {
+                    if (dadosSalvos[campo]) {
+                        atualizadas[campo] = dadosSalvos[campo].slice(0, 5);
+                    }
+                });
+
+                return atualizadas;
+            });
+
+            setSucessoConfiguracoes(
+                "Horários de entrada e saída salvos com sucesso!"
+            );
+        } catch (error) {
+            console.error("Erro ao salvar configurações:", error);
+
+            setErroConfiguracoes(
+                error.message ||
+                "Não foi possível salvar as configurações."
+            );
+        } finally {
+            setSalvandoConfiguracoes(false);
+        }
+    }
+
+    // =====================================================
+    // CONFIGURAÇÕES GERAIS DE COBRANÇA
+    // =====================================================
+
+    const [regrasCobranca, setRegrasCobranca] = useState({
+        valor_adaptacao: "50.00",
+        percentual_sinal: "30",
+        sinal_obrigatorio: true,
+        sinal_reembolsavel: false,
+        limite_pets_dia: "20",
+    });
+
+    const [carregandoCobranca, setCarregandoCobranca] = useState(true);
+    const [salvandoCobranca, setSalvandoCobranca] = useState(false);
+    const [erroCobranca, setErroCobranca] = useState("");
+    const [sucessoCobranca, setSucessoCobranca] = useState("");
 
     useEffect(() => {
         let ativo = true;
@@ -285,114 +399,6 @@ export default function ConfiguracoesEmpresa() {
         };
     }, [empresaId, ehAdministrador]);
 
-    // Atualiza um horário específico da semana
-    function atualizarHorario(dia, campo, valor) {
-        setHorarios((atuais) =>
-            atuais.map((horario) =>
-                horario.dia_semana === dia
-                    ? { ...horario, [campo]: valor }
-                    : horario
-            )
-        );
-
-        setErro("");
-        setSucesso("");
-    }
-
-    // Salva o funcionamento semanal
-    async function handleSalvar(event) {
-        event.preventDefault();
-
-        if (!empresaId || !ehAdministrador) {
-            setErro(
-                "Você não tem permissão para alterar os horários."
-            );
-            return;
-        }
-
-        setSalvando(true);
-        setErro("");
-        setSucesso("");
-
-        try {
-            await salvarHorariosEmpresa(empresaId, horarios);
-
-            setSucesso("Horários salvos com sucesso!");
-        } catch (error) {
-            console.error("Erro ao salvar horários:", error);
-
-            setErro(
-                error.message ||
-                "Não foi possível salvar os horários."
-            );
-        } finally {
-            setSalvando(false);
-        }
-    }
-
-    // Atualiza um campo de configuração
-    function atualizarConfiguracao(campo, valor) {
-        setConfiguracoes((atuais) => ({
-            ...atuais,
-            [campo]: valor,
-        }));
-
-        setErroConfiguracoes("");
-        setSucessoConfiguracoes("");
-    }
-
-    // Salva os horários de atendimento, entrada e saída
-    async function handleSalvarConfiguracoes(event) {
-        event.preventDefault();
-
-        if (!empresaId || !ehAdministrador) {
-            setErroConfiguracoes(
-                "Você não tem permissão para alterar as configurações."
-            );
-            return;
-        }
-
-        setSalvandoConfiguracoes(true);
-        setErroConfiguracoes("");
-        setSucessoConfiguracoes("");
-
-        try {
-            const dadosSalvos = await salvarHorariosConfiguracao(
-                empresaId,
-                configuracoes
-            );
-
-            setConfiguracoes((atuais) => {
-                const atualizadas = { ...atuais };
-
-                Object.keys(atuais).forEach((campo) => {
-                    if (dadosSalvos[campo]) {
-                        atualizadas[campo] =
-                            dadosSalvos[campo].slice(0, 5);
-                    }
-                });
-
-                return atualizadas;
-            });
-
-            setSucessoConfiguracoes(
-                "Horários de entrada e saída salvos com sucesso!"
-            );
-        } catch (error) {
-            console.error(
-                "Erro ao salvar configurações:",
-                error
-            );
-
-            setErroConfiguracoes(
-                error.message ||
-                "Não foi possível salvar as configurações."
-            );
-        } finally {
-            setSalvandoConfiguracoes(false);
-        }
-    }
-
     function atualizarRegraCobranca(campo, valor) {
         setRegrasCobranca((atuais) => ({
             ...atuais,
@@ -431,19 +437,298 @@ export default function ConfiguracoesEmpresa() {
                 limite_pets_dia: String(dadosSalvos.limite_pets_dia),
             });
 
-            setSucessoCobranca("Regras de cobrança salvas com sucesso!");
+            setSucessoCobranca(
+                "Configurações gerais de cobrança salvas com sucesso!"
+            );
         } catch (error) {
             console.error("Erro ao salvar regras de cobrança:", error);
 
             setErroCobranca(
-                error.message || "Não foi possível salvar as regras de cobrança."
+                error.message ||
+                "Não foi possível salvar as regras de cobrança."
             );
         } finally {
             setSalvandoCobranca(false);
         }
     }
 
-    // Verifica as permissões
+    // =====================================================
+    // REGRAS DE COBRANÇA POR SERVIÇO
+    // =====================================================
+
+    const [regrasServicos, setRegrasServicos] = useState([]);
+    const [carregandoServicos, setCarregandoServicos] = useState(true);
+    const [salvandoServicos, setSalvandoServicos] = useState(false);
+    const [erroServicos, setErroServicos] = useState("");
+    const [sucessoServicos, setSucessoServicos] = useState("");
+
+    useEffect(() => {
+        let ativo = true;
+
+        async function carregarRegrasServicos() {
+            if (!empresaId || !ehAdministrador) {
+                setCarregandoServicos(false);
+                return;
+            }
+
+            setCarregandoServicos(true);
+            setErroServicos("");
+
+            try {
+                const dados = await buscarRegrasCobrancaServicos(empresaId);
+
+                if (!ativo) return;
+
+                const regrasCarregadas = dados.map((regra) => ({
+                    ...regra,
+                    exige_sinal: regra.exige_sinal === true,
+                    percentual_sinal:
+                        regra.percentual_sinal == null
+                            ? "30"
+                            : String(regra.percentual_sinal),
+                    ativo: regra.ativo !== false,
+                    observacoes: regra.observacoes ?? "",
+                }));
+
+                setRegrasServicos(regrasCarregadas);
+            } catch (error) {
+                console.error(
+                    "Erro ao carregar regras por serviço:",
+                    error
+                );
+
+                if (ativo) {
+                    setErroServicos(
+                        error.message ||
+                        "Não foi possível carregar as regras por serviço."
+                    );
+                }
+            } finally {
+                if (ativo) setCarregandoServicos(false);
+            }
+        }
+
+        carregarRegrasServicos();
+
+        return () => {
+            ativo = false;
+        };
+    }, [empresaId, ehAdministrador]);
+
+    function atualizarRegraServico(servicoId, campo, valor) {
+        setRegrasServicos((atuais) =>
+            atuais.map((regra) =>
+                regra.servico_id === servicoId
+                    ? { ...regra, [campo]: valor }
+                    : regra
+            )
+        );
+
+        setErroServicos("");
+        setSucessoServicos("");
+    }
+
+    async function handleSalvarRegrasServicos(event) {
+        event.preventDefault();
+
+        if (!empresaId || !ehAdministrador) {
+            setErroServicos(
+                "Você não tem permissão para alterar as regras dos serviços."
+            );
+            return;
+        }
+
+        setSalvandoServicos(true);
+        setErroServicos("");
+        setSucessoServicos("");
+
+        try {
+            // Salva cada regra separadamente.
+            for (const regra of regrasServicos) {
+                await salvarRegraCobrancaServico(empresaId, {
+                    servico_id: regra.servico_id,
+                    tipo_cobranca: regra.tipo_cobranca,
+                    exige_sinal: regra.exige_sinal,
+                    percentual_sinal: regra.percentual_sinal,
+                    momento_sinal: regra.momento_sinal,
+                    momento_restante: regra.momento_restante,
+                    observacoes: regra.observacoes,
+                    ativo: regra.ativo,
+                });
+            }
+
+            // Recarrega as informações persistidas no banco.
+            const dadosAtualizados =
+                await buscarRegrasCobrancaServicos(empresaId);
+
+            setRegrasServicos(
+                dadosAtualizados.map((regra) => ({
+                    ...regra,
+                    exige_sinal: regra.exige_sinal === true,
+                    percentual_sinal:
+                        regra.percentual_sinal == null
+                            ? "30"
+                            : String(regra.percentual_sinal),
+                    ativo: regra.ativo !== false,
+                    observacoes: regra.observacoes ?? "",
+                }))
+            );
+
+            setSucessoServicos(
+                "Regras de cobrança dos serviços salvas com sucesso!"
+            );
+        } catch (error) {
+            console.error(
+                "Erro ao salvar regras dos serviços:",
+                error
+            );
+
+            setErroServicos(
+                error.message ||
+                "Não foi possível salvar todas as regras dos serviços."
+            );
+        } finally {
+            setSalvandoServicos(false);
+        }
+    }
+
+
+    // =====================================================
+    // CAPACIDADE E EXPIRAÇÃO DE AGENDAMENTOS
+    // =====================================================
+
+    const [limitesEmpresa, setLimitesEmpresa] = useState({
+        limite_hospedagem: "20",
+        limite_creche: "20",
+        minutos_expiracao_agendamento: "60",
+    });
+
+    const [carregandoLimites, setCarregandoLimites] = useState(true);
+    const [salvandoLimites, setSalvandoLimites] = useState(false);
+    const [erroLimites, setErroLimites] = useState("");
+    const [sucessoLimites, setSucessoLimites] = useState("");
+
+    useEffect(() => {
+        let ativo = true;
+
+        async function carregarLimites() {
+            if (!empresaId || !ehAdministrador) {
+                setCarregandoLimites(false);
+                return;
+            }
+
+            setCarregandoLimites(true);
+            setErroLimites("");
+
+            try {
+                const dados = await buscarLimitesEmpresa(empresaId);
+
+                if (!ativo) return;
+
+                if (dados) {
+                    setLimitesEmpresa({
+                        limite_hospedagem: String(
+                            dados.limite_hospedagem ?? 20
+                        ),
+                        limite_creche: String(
+                            dados.limite_creche ?? 20
+                        ),
+                        minutos_expiracao_agendamento: String(
+                            dados.minutos_expiracao_agendamento ?? 60
+                        ),
+                    });
+                }
+            } catch (error) {
+                console.error(
+                    "Erro ao carregar limites da empresa:",
+                    error
+                );
+
+                if (ativo) {
+                    setErroLimites(
+                        error.message ||
+                        "Não foi possível carregar os limites da empresa."
+                    );
+                }
+            } finally {
+                if (ativo) {
+                    setCarregandoLimites(false);
+                }
+            }
+        }
+
+        carregarLimites();
+
+        return () => {
+            ativo = false;
+        };
+    }, [empresaId, ehAdministrador]);
+
+    function atualizarLimite(campo, valor) {
+        setLimitesEmpresa((atuais) => ({
+            ...atuais,
+            [campo]: valor,
+        }));
+
+        setErroLimites("");
+        setSucessoLimites("");
+    }
+
+    async function handleSalvarLimites(event) {
+        event.preventDefault();
+
+        if (!empresaId || !ehAdministrador) {
+            setErroLimites(
+                "Você não tem permissão para alterar os limites da empresa."
+            );
+            return;
+        }
+
+        setSalvandoLimites(true);
+        setErroLimites("");
+        setSucessoLimites("");
+
+        try {
+            const dadosSalvos = await salvarLimitesEmpresa(
+                empresaId,
+                limitesEmpresa
+            );
+
+            setLimitesEmpresa({
+                limite_hospedagem: String(
+                    dadosSalvos.limite_hospedagem
+                ),
+                limite_creche: String(
+                    dadosSalvos.limite_creche
+                ),
+                minutos_expiracao_agendamento: String(
+                    dadosSalvos.minutos_expiracao_agendamento
+                ),
+            });
+
+            setSucessoLimites(
+                "Capacidades e tempo de expiração salvos com sucesso!"
+            );
+        } catch (error) {
+            console.error(
+                "Erro ao salvar limites da empresa:",
+                error
+            );
+
+            setErroLimites(
+                error.message ||
+                "Não foi possível salvar os limites da empresa."
+            );
+        } finally {
+            setSalvandoLimites(false);
+        }
+    }
+
+
+    // =====================================================
+    // PERMISSÕES
+    // =====================================================
+
     if (!ehAdministrador) {
         return (
             <div className="p-8 text-gray-600">
@@ -451,8 +736,6 @@ export default function ConfiguracoesEmpresa() {
             </div>
         );
     }
-
-    
 
     if (!empresaId) {
         return (
@@ -471,10 +754,13 @@ export default function ConfiguracoesEmpresa() {
         );
     }
 
+    // =====================================================
+    // INTERFACE
+    // =====================================================
+
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-10">
             <div className="mx-auto max-w-5xl">
-                {/* Cabeçalho */}
                 <header className="mb-8">
                     <div className="mb-3 flex items-center gap-3">
                         <div className="rounded-xl bg-blue-100 p-3 text-blue-700">
@@ -487,14 +773,15 @@ export default function ConfiguracoesEmpresa() {
                             </h1>
 
                             <p className="mt-1 text-sm text-gray-600">
-                                Gerencie os horários de funcionamento
-                                e atendimento.
+                                Gerencie os horários e as regras de cobrança
+                                dos serviços.
                             </p>
                         </div>
                     </div>
                 </header>
 
                 {/* FORMULÁRIO 1: FUNCIONAMENTO SEMANAL */}
+
                 <form
                     onSubmit={handleSalvar}
                     className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-8"
@@ -601,21 +888,17 @@ export default function ConfiguracoesEmpresa() {
                     <div className="mt-6 flex justify-end">
                         <button
                             type="submit"
-                            disabled={
-                                salvando || horarios.length !== 7
-                            }
+                            disabled={salvando || horarios.length !== 7}
                             className="flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Save size={18} />
-
-                            {salvando
-                                ? "Salvando..."
-                                : "Salvar horários"}
+                            {salvando ? "Salvando..." : "Salvar horários"}
                         </button>
                     </div>
                 </form>
 
                 {/* FORMULÁRIO 2: HORÁRIOS DE ENTRADA E SAÍDA */}
+
                 <form
                     onSubmit={handleSalvarConfiguracoes}
                     className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-8"
@@ -626,8 +909,8 @@ export default function ConfiguracoesEmpresa() {
                         </h2>
 
                         <p className="mt-1 text-sm text-gray-500">
-                            Configure os intervalos permitidos para
-                            atendimento, entrada e retirada dos pets.
+                            Configure os intervalos permitidos para atendimento,
+                            entrada e retirada dos pets.
                         </p>
                     </div>
 
@@ -659,11 +942,7 @@ export default function ConfiguracoesEmpresa() {
                                             <input
                                                 type="time"
                                                 required
-                                                value={
-                                                    configuracoes[
-                                                    grupo.inicio
-                                                    ]
-                                                }
+                                                value={configuracoes[grupo.inicio]}
                                                 onChange={(event) =>
                                                     atualizarConfiguracao(
                                                         grupo.inicio,
@@ -682,11 +961,7 @@ export default function ConfiguracoesEmpresa() {
                                             <input
                                                 type="time"
                                                 required
-                                                value={
-                                                    configuracoes[
-                                                    grupo.fim
-                                                    ]
-                                                }
+                                                value={configuracoes[grupo.fim]}
                                                 onChange={(event) =>
                                                     atualizarConfiguracao(
                                                         grupo.fim,
@@ -730,7 +1005,6 @@ export default function ConfiguracoesEmpresa() {
                             className="flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Save size={18} />
-
                             {salvandoConfiguracoes
                                 ? "Salvando..."
                                 : "Salvar horários de entrada e saída"}
@@ -738,18 +1012,20 @@ export default function ConfiguracoesEmpresa() {
                     </div>
                 </form>
 
-                {/* FORMULÁRIO 3: REGRAS DE COBRANÇA */}
+                {/* FORMULÁRIO 3: COBRANÇA GERAL */}
+
                 <form
                     onSubmit={handleSalvarCobranca}
                     className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-8"
                 >
                     <div className="mb-6">
                         <h2 className="text-lg font-semibold text-[#1B3347]">
-                            Regras de cobrança
+                            Configurações gerais de cobrança
                         </h2>
 
                         <p className="mt-1 text-sm text-gray-500">
-                            Configure os valores e as condições financeiras da empresa.
+                            Configure a taxa de adaptação e a capacidade diária
+                            geral da empresa.
                         </p>
                     </div>
 
@@ -783,7 +1059,7 @@ export default function ConfiguracoesEmpresa() {
 
                                 <label className="text-sm text-gray-600">
                                     <span className="mb-1 block font-medium">
-                                        Percentual do sinal (%)
+                                        Percentual geral de referência (%)
                                     </span>
 
                                     <input
@@ -801,11 +1077,16 @@ export default function ConfiguracoesEmpresa() {
                                         }
                                         className="w-full rounded-lg border border-gray-300 p-2.5 text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                                     />
+
+                                    <span className="mt-1 block text-xs text-gray-500">
+                                        O percentual efetivo de cada serviço
+                                        é configurado abaixo.
+                                    </span>
                                 </label>
 
                                 <label className="text-sm text-gray-600">
                                     <span className="mb-1 block font-medium">
-                                        Limite de pets por dia
+                                        Limite geral de pets por dia
                                     </span>
 
                                     <input
@@ -841,12 +1122,13 @@ export default function ConfiguracoesEmpresa() {
 
                                     <span>
                                         <span className="block font-medium text-[#1B3347]">
-                                            Exigir sinal para confirmar hospedagem
+                                            Configuração geral de sinal obrigatório
                                         </span>
 
                                         <span className="mt-1 block text-sm text-gray-500">
-                                            A reserva dependerá do pagamento do sinal,
-                                            conforme as regras do sistema.
+                                            Campo legado mantido para compatibilidade.
+                                            As regras específicas dos serviços são
+                                            configuradas na seção seguinte.
                                         </span>
                                     </span>
                                 </label>
@@ -870,9 +1152,9 @@ export default function ConfiguracoesEmpresa() {
                                         </span>
 
                                         <span className="mt-1 block text-sm text-gray-500">
-                                            Define a configuração geral de reembolso.
-                                            As condições de cancelamento ainda precisam
-                                            ser aplicadas ao fluxo de reservas.
+                                            Configuração geral. As condições de
+                                            cancelamento ainda precisam ser aplicadas
+                                            ao fluxo de reservas.
                                         </span>
                                     </span>
                                 </label>
@@ -905,14 +1187,354 @@ export default function ConfiguracoesEmpresa() {
                             className="flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Save size={18} />
-
                             {salvandoCobranca
                                 ? "Salvando..."
-                                : "Salvar regras de cobrança"}
+                                : "Salvar configurações gerais"}
                         </button>
                     </div>
                 </form>
 
+                {/* FORMULÁRIO 4: REGRAS POR SERVIÇO */}
+
+                <form
+                    onSubmit={handleSalvarRegrasServicos}
+                    className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-8"
+                >
+                    <div className="mb-6 flex items-start gap-3">
+                        <div className="rounded-xl bg-blue-100 p-3 text-blue-700">
+                            <CreditCard size={24} />
+                        </div>
+
+                        <div>
+                            <h2 className="text-lg font-semibold text-[#1B3347]">
+                                Regras de cobrança por serviço
+                            </h2>
+
+                            <p className="mt-1 text-sm text-gray-500">
+                                Configure separadamente a exigência de sinal
+                                para cada serviço cadastrado.
+                            </p>
+                        </div>
+                    </div>
+
+                    {carregandoServicos ? (
+                        <p className="text-sm text-gray-600">
+                            Carregando regras dos serviços...
+                        </p>
+                    ) : erroServicos && regrasServicos.length === 0 ? (
+                        <p
+                            role="alert"
+                            className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
+                        >
+                            {erroServicos}
+                        </p>
+                    ) : regrasServicos.length === 0 ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                            <p className="font-semibold">
+                                Nenhuma regra de serviço encontrada.
+                            </p>
+                            <p className="mt-1">
+                                Verifique se os serviços estão cadastrados e se
+                                cada serviço possui uma regra na tabela
+                                regras_cobranca do Supabase.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-5">
+                            {regrasServicos.map((regra) => (
+                                <div
+                                    key={regra.id || regra.servico_id}
+                                    className="rounded-xl border border-gray-200 p-4 md:p-5"
+                                >
+                                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <h3 className="font-semibold text-[#1B3347]">
+                                                {formatarNomeServico(regra)}
+                                            </h3>
+
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Tipo de cobrança:{" "}
+                                                {regra.tipo_cobranca}
+                                            </p>
+                                        </div>
+
+                                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={regra.ativo}
+                                                onChange={(event) =>
+                                                    atualizarRegraServico(
+                                                        regra.servico_id,
+                                                        "ativo",
+                                                        event.target.checked
+                                                    )
+                                                }
+                                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            Regra ativa
+                                        </label>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <label className="flex items-start gap-3">
+                                            <input
+                                                type="checkbox"
+                                                checked={regra.exige_sinal}
+                                                onChange={(event) =>
+                                                    atualizarRegraServico(
+                                                        regra.servico_id,
+                                                        "exige_sinal",
+                                                        event.target.checked
+                                                    )
+                                                }
+                                                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            />
+
+                                            <span>
+                                                <span className="block font-medium text-[#1B3347]">
+                                                    Exigir sinal para este serviço
+                                                </span>
+
+                                                <span className="mt-1 block text-sm text-gray-500">
+                                                    Quando desativado, o serviço
+                                                    não exige pagamento de sinal
+                                                    por esta regra.
+                                                </span>
+                                            </span>
+                                        </label>
+
+                                        <label className="block max-w-sm text-sm text-gray-600">
+                                            <span className="mb-1 block font-medium">
+                                                Percentual do sinal (%)
+                                            </span>
+
+                                            <input
+                                                type="number"
+                                                min="0.01"
+                                                max="100"
+                                                step="0.01"
+                                                required={regra.exige_sinal}
+                                                disabled={!regra.exige_sinal}
+                                                value={regra.percentual_sinal}
+                                                onChange={(event) =>
+                                                    atualizarRegraServico(
+                                                        regra.servico_id,
+                                                        "percentual_sinal",
+                                                        event.target.value
+                                                    )
+                                                }
+                                                className="w-full rounded-lg border border-gray-300 p-2.5 text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100 disabled:text-gray-400"
+                                            />
+                                        </label>
+
+                                        <label className="block text-sm text-gray-600">
+                                            <span className="mb-1 block font-medium">
+                                                Observações da cobrança
+                                            </span>
+
+                                            <textarea
+                                                rows={2}
+                                                value={regra.observacoes}
+                                                onChange={(event) =>
+                                                    atualizarRegraServico(
+                                                        regra.servico_id,
+                                                        "observacoes",
+                                                        event.target.value
+                                                    )
+                                                }
+                                                placeholder="Ex.: condições específicas de pagamento..."
+                                                className="w-full rounded-lg border border-gray-300 p-2.5 text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {erroServicos && regrasServicos.length > 0 && (
+                        <p
+                            role="alert"
+                            className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+                        >
+                            {erroServicos}
+                        </p>
+                    )}
+
+                    {sucessoServicos && (
+                        <p
+                            role="status"
+                            className="mt-5 rounded-lg bg-green-50 p-3 text-sm text-green-700"
+                        >
+                            {sucessoServicos}
+                        </p>
+                    )}
+
+                    <div className="mt-6 flex justify-end">
+                        <button
+                            type="submit"
+                            disabled={
+                                salvandoServicos ||
+                                carregandoServicos ||
+                                regrasServicos.length === 0
+                            }
+                            className="flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <Save size={18} />
+                            {salvandoServicos
+                                ? "Salvando regras..."
+                                : "Salvar regras por serviço"}
+                        </button>
+                    </div>
+                </form>
+
+
+                {/* FORMULÁRIO 5: CAPACIDADE E EXPIRAÇÃO */}
+
+                <form
+                    onSubmit={handleSalvarLimites}
+                    className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-8"
+                >
+                    <div className="mb-6 flex items-start gap-3">
+                        <div className="rounded-xl bg-blue-100 p-3 text-blue-700">
+                            <Clock size={24} />
+                        </div>
+
+                        <div>
+                            <h2 className="text-lg font-semibold text-[#1B3347]">
+                                Capacidade e expiração de agendamentos
+                            </h2>
+
+                            <p className="mt-1 text-sm text-gray-500">
+                                Defina a capacidade de atendimento e o tempo
+                                permitido para solicitações pendentes.
+                            </p>
+                        </div>
+                    </div>
+
+                    {carregandoLimites ? (
+                        <p className="text-sm text-gray-600">
+                            Carregando limites da empresa...
+                        </p>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                            <label className="text-sm text-gray-600">
+                                <span className="mb-1 block font-medium">
+                                    Capacidade da hospedagem
+                                </span>
+
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    required
+                                    value={limitesEmpresa.limite_hospedagem}
+                                    onChange={(event) =>
+                                        atualizarLimite(
+                                            "limite_hospedagem",
+                                            event.target.value
+                                        )
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 p-2.5 text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                />
+
+                                <span className="mt-1 block text-xs text-gray-500">
+                                    Número máximo de pets hospedados
+                                    simultaneamente.
+                                </span>
+                            </label>
+
+                            <label className="text-sm text-gray-600">
+                                <span className="mb-1 block font-medium">
+                                    Capacidade diária da creche
+                                </span>
+
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    required
+                                    value={limitesEmpresa.limite_creche}
+                                    onChange={(event) =>
+                                        atualizarLimite(
+                                            "limite_creche",
+                                            event.target.value
+                                        )
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 p-2.5 text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                />
+
+                                <span className="mt-1 block text-xs text-gray-500">
+                                    Número máximo de pets atendidos
+                                    na creche por dia.
+                                </span>
+                            </label>
+
+                            <label className="text-sm text-gray-600">
+                                <span className="mb-1 block font-medium">
+                                    Expiração da solicitação (minutos)
+                                </span>
+
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    required
+                                    value={
+                                        limitesEmpresa.minutos_expiracao_agendamento
+                                    }
+                                    onChange={(event) =>
+                                        atualizarLimite(
+                                            "minutos_expiracao_agendamento",
+                                            event.target.value
+                                        )
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 p-2.5 text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                />
+
+                                <span className="mt-1 block text-xs text-gray-500">
+                                    Tempo configurado para uma solicitação
+                                    pendente, antes de poder expirar.
+                                </span>
+                            </label>
+                        </div>
+                    )}
+
+                    {erroLimites && (
+                        <p
+                            role="alert"
+                            className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+                        >
+                            {erroLimites}
+                        </p>
+                    )}
+
+                    {sucessoLimites && (
+                        <p
+                            role="status"
+                            className="mt-5 rounded-lg bg-green-50 p-3 text-sm text-green-700"
+                        >
+                            {sucessoLimites}
+                        </p>
+                    )}
+
+                    <div className="mt-6 flex justify-end">
+                        <button
+                            type="submit"
+                            disabled={
+                                salvandoLimites ||
+                                carregandoLimites
+                            }
+                            className="flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <Save size={18} />
+
+                            {salvandoLimites
+                                ? "Salvando..."
+                                : "Salvar capacidade e expiração"}
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     );

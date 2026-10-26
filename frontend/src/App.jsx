@@ -24,9 +24,14 @@ import Agendamentos from "./pages/Agendamentos";
 import Historico from "./pages/Historico";
 import Perfil from "./pages/Perfil";
 
+
+import TesteAdaptacao from "./TesteAdaptacao";
+
+
 import DashboardAdmin from "./pages/DashboardAdmin";
 import AgendamentosAdmin from "./pages/AgendamentosAdmin";
 import ConfiguracoesEmpresa from "./pages/ConfiguracoesEmpresa";
+import AdaptacoesAdmin from "./pages/AdaptacoesAdmin";
 
 function App() {
   return (
@@ -131,6 +136,27 @@ function App() {
                 <EquipeRoute apenasAdmin>
                   <ConfiguracoesEmpresa />
                 </EquipeRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/adaptacoes"
+            element={
+              <ProtectedRoute>
+                <EquipeRoute>
+                  <AdaptacoesAdmin />
+                </EquipeRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Rota temporária para testar adaptações */}
+          <Route
+            path="/teste-adaptacao"
+            element={
+              <ProtectedRoute>
+                <TesteAdaptacao />
               </ProtectedRoute>
             }
           />

@@ -14,10 +14,12 @@ export async function buscarHorariosEmpresa(empresaId) {
         .order("dia_semana");
 
     if (error) {
-        throw error;
+        throw new Error(
+            `Erro ao buscar horários semanais: ${error.message}`
+        );
     }
 
-    return data;
+    return data ?? [];
 }
 
 // Salva os horários semanais de uma empresa.
@@ -29,54 +31,65 @@ export async function salvarHorariosEmpresa(
         throw new Error("O ID da empresa é obrigatório.");
     }
 
-    for (let i = 0; i < CAMPOS_HORARIOS.length; i += 2) {
-        const inicio = horarios[CAMPOS_HORARIOS[i]];
-        const fim = horarios[CAMPOS_HORARIOS[i + 1]];
-
-        if (!inicio || !fim || inicio >= fim) {
-            throw new Error(
-                "Confira os horários: o início deve ser anterior ao fim."
-            );
-        }
-    }
-
-    const configuracoes = {
-        empresa_id: empresaId,
-    };
-
-    CAMPOS_HORARIOS.forEach((campo) => {
-        configuracoes[campo] = horarios[campo];
-    });
-
-    // Primeiro, tenta atualizar a configuração existente.
-    const { data: existente, error: erroBusca } = await supabase
-        .from("configuracoes_empresa")
-        .select("id")
-        .eq("empresa_id", empresaId)
-        .maybeSingle();
-
-    if (erroBusca) {
+    if (!Array.isArray(horarios) || horarios.length !== 7) {
         throw new Error(
-            `Erro ao verificar configurações: ${erroBusca.message}`
+            "É necessário informar os horários dos sete dias da semana."
         );
     }
 
-    const consulta = existente
-        ? supabase
-            .from("configuracoes_empresa")
-            .update(configuracoes)
-            .eq("empresa_id", empresaId)
-        : supabase
-            .from("configuracoes_empresa")
-            .insert(configuracoes);
+    const dias = new Set();
 
-    const { data, error } = await consulta
+    const dados = horarios.map((horario) => {
+        const dia = Number(horario.dia_semana);
+
+        if (!Number.isInteger(dia) || dia < 0 || dia > 6) {
+            throw new Error("Foi informado um dia da semana inválido.");
+        }
+
+        if (dias.has(dia)) {
+            throw new Error("Existe um dia da semana duplicado.");
+        }
+
+        dias.add(dia);
+
+        const aberto = Boolean(horario.aberto);
+        const inicio = horario.hora_inicio;
+        const fim = horario.hora_fim;
+
+        if (aberto) {
+            if (!inicio || !fim || inicio >= fim) {
+                throw new Error(
+                    "Nos dias abertos, o início deve ser anterior ao fim."
+                );
+            }
+        }
+
+        return {
+            empresa_id: empresaId,
+            dia_semana: dia,
+            aberto,
+            hora_inicio: aberto ? inicio : null,
+            hora_fim: aberto ? fim : null,
+        };
+    });
+
+    if (dias.size !== 7) {
+        throw new Error(
+            "Todos os dias da semana precisam estar configurados."
+        );
+    }
+
+    const { data, error } = await supabase
+        .from("horarios_empresa")
+        .upsert(dados, {
+            onConflict: "empresa_id,dia_semana",
+        })
         .select()
-        .single();
+        .order("dia_semana");
 
     if (error) {
         throw new Error(
-            `Erro ao salvar horários: ${error.message}`
+            `Erro ao salvar horários semanais: ${error.message}`
         );
     }
 
