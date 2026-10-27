@@ -1,3 +1,13 @@
+/* =========================================================
+   CASA 104
+   SCRIPT.JS
+   ========================================================= */
+
+
+/* =========================================================
+   INICIALIZAÇÃO
+   ========================================================= */
+
 document.addEventListener("DOMContentLoaded", () => {
 
     initMobileMenu();
@@ -15,7 +25,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
-// MENU MOBILE 
+/* =========================================================
+   MENU MOBILE
+   ========================================================= */
 
 function initMobileMenu() {
 
@@ -137,7 +149,9 @@ function initMobileMenu() {
 }
 
 
-// NAVEGAÇÃO SUAVE
+/* =========================================================
+   NAVEGAÇÃO SUAVE
+   ========================================================= */
 
 function initSmoothNavigation() {
 
@@ -208,7 +222,9 @@ function initSmoothNavigation() {
 }
 
 
-// MENU ATIVO CONFORME O SCROLL
+/* =========================================================
+   MENU ATIVO CONFORME O SCROLL
+   ========================================================= */
 
 function initScrollSpy() {
 
@@ -558,6 +574,11 @@ function initContactForm() {
 
 }
 
+
+/* =========================================================
+   VALIDAÇÃO DE E-MAIL
+   ========================================================= */
+
 function validateEmail(email) {
 
     const regex =
@@ -569,7 +590,12 @@ function validateEmail(email) {
 }
 
 
+/* =========================================================
+   TOAST
+   ========================================================= */
+
 let toastTimer = null;
+
 
 function showToast(text) {
 
